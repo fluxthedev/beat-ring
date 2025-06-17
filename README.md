@@ -53,7 +53,7 @@ to main from your branch.
 Before submitting, please:
 
 - Follow the existing code style (TypeScript & React best practices)
-- Write clear, concise commit messages.
+- Write clear, concise commit messages
 - Test your changes
 
 Found a bug or have a feature request? [Open an issue](https://github.com/fluxthedev/beat-ring/issues).
