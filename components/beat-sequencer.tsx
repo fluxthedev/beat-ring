@@ -110,19 +110,47 @@ export function BeatSequencer() {
             },
           }).toDestination()
 
-          // Snare drum - noise burst with bandpass filter
+          // Snare drum - noise burst with bandpass filter and pitch envelope
           synths.snare = new Tone.NoiseSynth({
             noise: {
               type: "white",
-              playbackRate: 3,
+              playbackRate: 2,
             },
             envelope: {
               attack: 0.001,
-              decay: 0.13,
-              sustain: 0.01,
-              release: 0.03,
+              decay: 0.2,
+              sustain: 0.1,
+              release: 0.1,
             },
-          }).toDestination()
+          }).chain(
+            new Tone.Filter({
+              frequency: 3000,
+              type: "bandpass",
+              Q: 1,
+            }),
+            Tone.Destination,
+          )
+
+          // Clap - multiple quick noise bursts to simulate hand clap
+          synths.clap = new Tone.NoiseSynth({
+            noise: {
+              type: "pink",
+              playbackRate: 0.5,
+            },
+            envelope: {
+              attack: 0.001,
+              decay: 0.05,
+              sustain: 0.3,
+              release: 0.1,
+            },
+          }).chain(
+            new Tone.Filter({
+              frequency: 2000,
+              type: "highpass",
+              Q: 0.5,
+            }),
+            Tone.Destination,
+          )
 
           // Hi-hat - high frequency noise burst
           synths.hihat = new Tone.NoiseSynth({
@@ -134,20 +162,6 @@ export function BeatSequencer() {
               attack: 0.001,
               decay: 0.1,
               sustain: 0.01,
-              release: 0.03,
-            },
-          }).toDestination()
-
-          // Clap - multiple noise bursts
-          synths.clap = new Tone.NoiseSynth({
-            noise: {
-              type: "pink",
-              playbackRate: 1,
-            },
-            envelope: {
-              attack: 0.001,
-              decay: 0.15,
-              sustain: 0,
               release: 0.03,
             },
           }).toDestination()
@@ -583,72 +597,133 @@ export function BeatSequencer() {
       const duration = (60 / tempo) * 4 * (STEPS / 4) // Duration for one full loop
       const offlineContext = new OfflineAudioContext(2, sampleRate * duration, sampleRate)
 
-      // Create synths for offline rendering
-      const offlineSynths: Record<string, any> = {}
-
-      // Kick drum
-      offlineSynths.kick = new Tone.MembraneSynth({
-        pitchDecay: 0.05,
-        octaves: 10,
-        oscillator: { type: "sine" },
-        envelope: {
-          attack: 0.001,
-          decay: 0.4,
-          sustain: 0.01,
-          release: 1.4,
-          attackCurve: "exponential",
-        },
-      }).connect(new Tone.Destination({ context: offlineContext }))
-
-      // Snare drum
-      offlineSynths.snare = new Tone.NoiseSynth({
-        noise: { type: "white", playbackRate: 3 },
-        envelope: {
-          attack: 0.001,
-          decay: 0.13,
-          sustain: 0.01,
-          release: 0.03,
-        },
-      }).connect(new Tone.Destination({ context: offlineContext }))
-
-      // Hi-hat
-      offlineSynths.hihat = new Tone.NoiseSynth({
-        noise: { type: "white", playbackRate: 1 },
-        envelope: {
-          attack: 0.001,
-          decay: 0.1,
-          sustain: 0.01,
-          release: 0.03,
-        },
-      }).connect(new Tone.Destination({ context: offlineContext }))
-
-      // Clap
-      offlineSynths.clap = new Tone.NoiseSynth({
-        noise: { type: "pink", playbackRate: 1 },
-        envelope: {
-          attack: 0.001,
-          decay: 0.15,
-          sustain: 0,
-          release: 0.03,
-        },
-      }).connect(new Tone.Destination({ context: offlineContext }))
-
-      // Tom
-      offlineSynths.tom = new Tone.MembraneSynth({
-        pitchDecay: 0.008,
-        octaves: 4,
-        oscillator: { type: "sine" },
-        envelope: {
-          attack: 0.001,
-          decay: 0.5,
-          sustain: 0.01,
-          release: 1,
-          attackCurve: "exponential",
-        },
-      }).connect(new Tone.Destination({ context: offlineContext }))
-
       // Calculate timing
       const stepDuration = 60 / tempo / 4 // Duration of each 16th note
+
+      // Create simple drum sounds using Web Audio API directly
+      const createKickSound = (context: OfflineAudioContext, startTime: number) => {
+        const oscillator = context.createOscillator()
+        const gainNode = context.createGain()
+
+        oscillator.type = "sine"
+        oscillator.frequency.setValueAtTime(60, startTime)
+        oscillator.frequency.exponentialRampToValueAtTime(0.01, startTime + 0.5)
+
+        gainNode.gain.setValueAtTime(0.3, startTime)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.5)
+
+        oscillator.connect(gainNode)
+        gainNode.connect(context.destination)
+
+        oscillator.start(startTime)
+        oscillator.stop(startTime + 0.5)
+      }
+
+      const createSnareSound = (context: OfflineAudioContext, startTime: number) => {
+        const bufferSize = context.sampleRate * 0.2
+        const buffer = context.createBuffer(1, bufferSize, context.sampleRate)
+        const output = buffer.getChannelData(0)
+
+        // Generate white noise
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1
+        }
+
+        const noise = context.createBufferSource()
+        const filter = context.createBiquadFilter()
+        const gainNode = context.createGain()
+
+        noise.buffer = buffer
+        filter.type = "bandpass"
+        filter.frequency.value = 3000
+        filter.Q.value = 1
+
+        gainNode.gain.setValueAtTime(0.2, startTime)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.2)
+
+        noise.connect(filter)
+        filter.connect(gainNode)
+        gainNode.connect(context.destination)
+
+        noise.start(startTime)
+        noise.stop(startTime + 0.2)
+      }
+
+      const createHihatSound = (context: OfflineAudioContext, startTime: number) => {
+        const bufferSize = context.sampleRate * 0.1
+        const buffer = context.createBuffer(1, bufferSize, context.sampleRate)
+        const output = buffer.getChannelData(0)
+
+        // Generate white noise
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1
+        }
+
+        const noise = context.createBufferSource()
+        const filter = context.createBiquadFilter()
+        const gainNode = context.createGain()
+
+        noise.buffer = buffer
+        filter.type = "highpass"
+        filter.frequency.value = 8000
+
+        gainNode.gain.setValueAtTime(0.1, startTime)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.1)
+
+        noise.connect(filter)
+        filter.connect(gainNode)
+        gainNode.connect(context.destination)
+
+        noise.start(startTime)
+        noise.stop(startTime + 0.1)
+      }
+
+      const createClapSound = (context: OfflineAudioContext, startTime: number) => {
+        const bufferSize = context.sampleRate * 0.15
+        const buffer = context.createBuffer(1, bufferSize, context.sampleRate)
+        const output = buffer.getChannelData(0)
+
+        // Generate pink noise
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = (Math.random() * 2 - 1) * 0.5
+        }
+
+        const noise = context.createBufferSource()
+        const filter = context.createBiquadFilter()
+        const gainNode = context.createGain()
+
+        noise.buffer = buffer
+        filter.type = "highpass"
+        filter.frequency.value = 2000
+
+        gainNode.gain.setValueAtTime(0.15, startTime)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.15)
+
+        noise.connect(filter)
+        filter.connect(gainNode)
+        gainNode.connect(context.destination)
+
+        noise.start(startTime)
+        noise.stop(startTime + 0.15)
+      }
+
+      const createTomSound = (context: OfflineAudioContext, startTime: number) => {
+        const oscillator = context.createOscillator()
+        const gainNode = context.createGain()
+
+        oscillator.type = "sine"
+        oscillator.frequency.setValueAtTime(200, startTime)
+        oscillator.frequency.exponentialRampToValueAtTime(50, startTime + 0.3)
+
+        gainNode.gain.setValueAtTime(0.2, startTime)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3)
+
+        oscillator.connect(gainNode)
+        gainNode.connect(context.destination)
+
+        oscillator.start(startTime)
+        oscillator.stop(startTime + 0.3)
+      }
 
       // Schedule all the sounds
       for (let step = 0; step < STEPS; step++) {
@@ -657,19 +732,23 @@ export function BeatSequencer() {
         pattern.forEach((track, trackIndex) => {
           if (track[step]) {
             const soundName = ["kick", "snare", "hihat", "clap", "tom"][trackIndex]
-            const synth = offlineSynths[soundName]
-            if (synth) {
-              if (soundName === "kick") {
-                synth.triggerAttackRelease("C1", "8n", stepTime)
-              } else if (soundName === "snare") {
-                synth.triggerAttackRelease("8n", stepTime)
-              } else if (soundName === "hihat") {
-                synth.triggerAttackRelease("32n", stepTime)
-              } else if (soundName === "clap") {
-                synth.triggerAttackRelease("8n", stepTime)
-              } else if (soundName === "tom") {
-                synth.triggerAttackRelease("G2", "8n", stepTime)
-              }
+
+            switch (soundName) {
+              case "kick":
+                createKickSound(offlineContext, stepTime)
+                break
+              case "snare":
+                createSnareSound(offlineContext, stepTime)
+                break
+              case "hihat":
+                createHihatSound(offlineContext, stepTime)
+                break
+              case "clap":
+                createClapSound(offlineContext, stepTime)
+                break
+              case "tom":
+                createTomSound(offlineContext, stepTime)
+                break
             }
           }
         })
@@ -690,9 +769,6 @@ export function BeatSequencer() {
       link.click()
       URL.revokeObjectURL(url)
 
-      // Dispose offline synths
-      Object.values(offlineSynths).forEach((synth) => synth.dispose())
-
       toast({
         title: "WAV exported",
         description: "Your beat pattern has been exported as a WAV file.",
@@ -710,17 +786,9 @@ export function BeatSequencer() {
   // Export pattern as MIDI
   const exportMIDI = () => {
     try {
-      // Create MIDI data structure
-      const midiData = {
-        tracks: [
-          {
-            name: "Beat Pattern",
-            channel: 9, // Channel 10 (0-indexed) is typically used for drums
-            events: [] as any[],
-          },
-        ],
-        ticksPerQuarter: 480,
-      }
+      // Simple MIDI file structure
+      const ticksPerQuarter = 480
+      const ticksPerStep = ticksPerQuarter / 4 // 16th notes
 
       // MIDI note mappings for drum sounds (General MIDI drum map)
       const drumNotes = {
@@ -731,57 +799,92 @@ export function BeatSequencer() {
         tom: 45, // Low Tom
       }
 
-      // Calculate timing (480 ticks per quarter note, 16th notes = 120 ticks each)
-      const ticksPerStep = 120
+      // Create MIDI events
+      const events: number[] = []
+
+      // Add tempo event (set tempo meta event)
+      const microsecondsPerQuarter = Math.round(60000000 / tempo)
+      events.push(
+        0x00, // Delta time
+        0xff,
+        0x51,
+        0x03, // Set tempo meta event
+        (microsecondsPerQuarter >> 16) & 0xff,
+        (microsecondsPerQuarter >> 8) & 0xff,
+        microsecondsPerQuarter & 0xff,
+      )
 
       // Add note events
+      let currentTick = 0
       for (let step = 0; step < STEPS; step++) {
-        const stepTime = step * ticksPerStep
+        const stepTick = step * ticksPerStep
+        const deltaTime = stepTick - currentTick
 
         pattern.forEach((track, trackIndex) => {
           if (track[step]) {
             const soundName = ["kick", "snare", "hihat", "clap", "tom"][trackIndex] as keyof typeof drumNotes
             const note = drumNotes[soundName]
 
-            // Note on event
-            midiData.tracks[0].events.push({
-              type: "noteOn",
-              time: stepTime,
-              note: note,
-              velocity: 100,
-            })
+            // Add note on event
+            events.push(
+              ...encodeVariableLength(deltaTime),
+              0x99, // Note on, channel 10 (drums)
+              note,
+              100, // Velocity
+            )
 
-            // Note off event (short duration for drums)
-            midiData.tracks[0].events.push({
-              type: "noteOff",
-              time: stepTime + 60, // Short duration
-              note: note,
-              velocity: 0,
-            })
+            // Add note off event after short duration
+            events.push(
+              ...encodeVariableLength(60), // Short duration
+              0x89, // Note off, channel 10
+              note,
+              0, // Velocity
+            )
+
+            currentTick = stepTick + 60
           }
         })
       }
 
-      // Add tempo event
-      midiData.tracks[0].events.unshift({
-        type: "setTempo",
-        time: 0,
-        microsecondsPerQuarter: Math.round(60000000 / tempo),
-      })
+      // End of track
+      events.push(0x00, 0xff, 0x2f, 0x00)
 
-      // Sort events by time
-      midiData.tracks[0].events.sort((a, b) => a.time - b.time)
+      // Create MIDI file
+      const trackLength = events.length
+      const midiFile = new Uint8Array(14 + 8 + trackLength)
+      let offset = 0
 
-      // Convert to MIDI file format
-      const midiBuffer = createMIDIFile(midiData)
-      const blob = new Blob([midiBuffer], { type: "audio/midi" })
+      // MIDI header chunk
+      midiFile.set([0x4d, 0x54, 0x68, 0x64], offset) // "MThd"
+      offset += 4
+      midiFile.set([0x00, 0x00, 0x00, 0x06], offset) // Header length
+      offset += 4
+      midiFile.set([0x00, 0x01], offset) // Format type 1
+      offset += 2
+      midiFile.set([0x00, 0x01], offset) // Number of tracks
+      offset += 2
+      midiFile.set([(ticksPerQuarter >> 8) & 0xff, ticksPerQuarter & 0xff], offset) // Ticks per quarter
+      offset += 2
 
-      // Download the file
+      // Track chunk
+      midiFile.set([0x4d, 0x54, 0x72, 0x6b], offset) // "MTrk"
+      offset += 4
+      midiFile.set(
+        [(trackLength >> 24) & 0xff, (trackLength >> 16) & 0xff, (trackLength >> 8) & 0xff, trackLength & 0xff],
+        offset,
+      ) // Track length
+      offset += 4
+      midiFile.set(events, offset) // Track data
+
+      // Create blob and download
+      const blob = new Blob([midiFile], { type: "audio/midi" })
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
       link.download = "beat-pattern.mid"
+      document.body.appendChild(link)
       link.click()
+      document.body.removeChild(link)
       URL.revokeObjectURL(url)
 
       toast({
@@ -846,86 +949,19 @@ export function BeatSequencer() {
     return arrayBuffer
   }
 
-  // Helper function to create MIDI file
-  const createMIDIFile = (midiData: any): Uint8Array => {
-    const tracks = midiData.tracks
-    const ticksPerQuarter = midiData.ticksPerQuarter
-
-    // Calculate track data
-    const trackData = tracks.map((track: any) => {
-      const events = track.events
-      const trackBytes: number[] = []
-      let lastTime = 0
-
-      events.forEach((event: any) => {
-        // Delta time
-        const deltaTime = event.time - lastTime
-        lastTime = event.time
-        trackBytes.push(...encodeVariableLength(deltaTime))
-
-        // Event data
-        if (event.type === "noteOn") {
-          trackBytes.push(0x90 + (track.channel || 0), event.note, event.velocity)
-        } else if (event.type === "noteOff") {
-          trackBytes.push(0x80 + (track.channel || 0), event.note, event.velocity)
-        } else if (event.type === "setTempo") {
-          trackBytes.push(0xff, 0x51, 0x03)
-          const tempo = event.microsecondsPerQuarter
-          trackBytes.push((tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff)
-        }
-      })
-
-      // End of track
-      trackBytes.push(0x00, 0xff, 0x2f, 0x00)
-      return new Uint8Array(trackBytes)
-    })
-
-    // Calculate total size
-    let totalSize = 14 // Header size
-    trackData.forEach((track) => {
-      totalSize += 8 + track.length // Track header + data
-    })
-
-    const buffer = new Uint8Array(totalSize)
-    let offset = 0
-
-    // MIDI header
-    buffer.set([0x4d, 0x54, 0x68, 0x64], offset) // "MThd"
-    offset += 4
-    buffer.set([0x00, 0x00, 0x00, 0x06], offset) // Header length
-    offset += 4
-    buffer.set([0x00, 0x01], offset) // Format 1
-    offset += 2
-    buffer.set([(tracks.length >> 8) & 0xff, tracks.length & 0xff], offset) // Number of tracks
-    offset += 2
-    buffer.set([(ticksPerQuarter >> 8) & 0xff, ticksPerQuarter & 0xff], offset) // Ticks per quarter
-    offset += 2
-
-    // Track data
-    trackData.forEach((track) => {
-      buffer.set([0x4d, 0x54, 0x72, 0x6b], offset) // "MTrk"
-      offset += 4
-      buffer.set(
-        [(track.length >> 24) & 0xff, (track.length >> 16) & 0xff, (track.length >> 8) & 0xff, track.length & 0xff],
-        offset,
-      ) // Track length
-      offset += 4
-      buffer.set(track, offset)
-      offset += track.length
-    })
-
-    return buffer
-  }
-
-  // Helper function to encode variable length quantity
+  // Helper function to encode variable length quantity (fixed)
   const encodeVariableLength = (value: number): number[] => {
+    if (value === 0) return [0]
+
     const bytes: number[] = []
     bytes.unshift(value & 0x7f)
     value >>= 7
+
     while (value > 0) {
       bytes.unshift((value & 0x7f) | 0x80)
       value >>= 7
     }
+
     return bytes
   }
 
