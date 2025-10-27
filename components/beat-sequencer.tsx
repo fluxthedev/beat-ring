@@ -45,6 +45,16 @@ const INITIAL_PATTERN = Array(SAMPLES.length)
   .fill(null)
   .map(() => Array(STEPS).fill(false))
 
+interface TrackSettings {
+  volume: number
+  pitch: number
+}
+
+const INITIAL_TRACK_SETTINGS: TrackSettings[] = SAMPLES.map(() => ({
+  volume: 0, // 0 dB
+  pitch: 0, // 0 cents offset
+}))
+
 export function BeatSequencer() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -55,6 +65,7 @@ export function BeatSequencer() {
   const [metronome, setMetronome] = useState(false)
   const [quantize, setQuantize] = useState(true)
   const [pattern, setPattern] = useState<boolean[][]>(INITIAL_PATTERN)
+  const [trackSettings, setTrackSettings] = useState<TrackSettings[]>(INITIAL_TRACK_SETTINGS)
   const [history, setHistory] = useState<boolean[][][]>([INITIAL_PATTERN])
   const [historyIndex, setHistoryIndex] = useState(0)
   const { theme } = useTheme()
@@ -78,6 +89,40 @@ export function BeatSequencer() {
   useEffect(() => {
     Tone.Transport.bpm.value = tempo
   }, [tempo])
+
+  // Update synth settings when they change
+  useEffect(() => {
+    if (!samplesLoaded) return
+
+    const kit = KITS[selectedKit as keyof typeof KITS]
+
+    trackSettings.forEach((settings, trackIndex) => {
+      const sampleInfo = SAMPLES[trackIndex]
+      const soundName = sampleInfo.name.toLowerCase()
+      const synth = synthsRef.current[soundName]
+
+      if (synth) {
+        // Update volume
+        synth.volume.value = settings.volume
+
+        // Update pitch
+        const pitchInCents = settings.pitch
+
+        if (synth.detune) {
+          // This works for MembraneSynth, MetalSynth, and most other synths
+          synth.detune.value = pitchInCents
+        } else if (synth instanceof Tone.NoiseSynth) {
+          // For NoiseSynth, we adjust playbackRate as it doesn't have a detune property.
+          const sampleName = sampleInfo.name as keyof typeof kit
+          const kitSound = kit[sampleName]
+          // @ts-ignore
+          const initialPlaybackRate = kitSound?.options?.noise?.playbackRate || 1
+          // Calculate playback rate from cents. 1200 cents = 1 octave = 2x playback rate.
+          synth.noise.playbackRate = initialPlaybackRate * 2 ** (pitchInCents / 1200)
+        }
+      }
+    })
+  }, [trackSettings, samplesLoaded, selectedKit])
 
   // Initialize Tone.js and create synthetic drum sounds
   useEffect(() => {
@@ -430,6 +475,7 @@ export function BeatSequencer() {
       selectedKit,
       metronome,
       quantize,
+      trackSettings,
     }
 
     // Create a data URL
@@ -463,6 +509,7 @@ export function BeatSequencer() {
         setSelectedKit(data.selectedKit || "Default")
         setMetronome(data.metronome || false)
         setQuantize(data.quantize || true)
+        setTrackSettings(data.trackSettings || INITIAL_TRACK_SETTINGS)
 
         // Reset history with this new pattern
         setHistory([data.pattern])
@@ -486,6 +533,12 @@ export function BeatSequencer() {
     event.target.value = ""
   }
 
+  const handleTrackSettingChange = (trackIndex: number, setting: keyof TrackSettings, value: number) => {
+    const newSettings = [...trackSettings]
+    newSettings[trackIndex] = { ...newSettings[trackIndex], [setting]: value }
+    setTrackSettings(newSettings)
+  }
+
   // Share pattern via URL
   const sharePattern = () => {
     const data = {
@@ -495,6 +548,7 @@ export function BeatSequencer() {
       selectedKit,
       metronome,
       quantize,
+      trackSettings,
     }
 
     // Create a compressed URL parameter
@@ -912,6 +966,7 @@ export function BeatSequencer() {
         setSelectedKit(data.selectedKit || "Default")
         setMetronome(data.metronome || false)
         setQuantize(data.quantize || true)
+        setTrackSettings(data.trackSettings || INITIAL_TRACK_SETTINGS)
 
         // Reset history with this new pattern
         setHistory([data.pattern])
@@ -1288,6 +1343,42 @@ export function BeatSequencer() {
             <label htmlFor="quantize" className="text-sm font-medium">
               Quantize
             </label>
+          </div>
+        </div>
+
+        {/* Mixer controls */}
+        <div className="grid gap-6 mt-4">
+          <h2 className="text-xl font-bold text-center">Mixer</h2>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+            {SAMPLES.map((sample, trackIndex) => (
+              <div key={trackIndex} className="grid gap-3 p-4 rounded-lg" style={{ backgroundColor: `${TRACK_COLORS[trackIndex]}33` }}>
+                <span className="text-sm font-bold" style={{ color: TRACK_COLORS[trackIndex] }}>
+                  {sample.name}
+                </span>
+                <div className="grid gap-1">
+                  <label className="text-xs">Volume</label>
+                  <Slider
+                    value={[trackSettings[trackIndex].volume]}
+                    min={-24}
+                    max={6}
+                    step={1}
+                    onValueChange={(value) => handleTrackSettingChange(trackIndex, "volume", value[0])}
+                  />
+                  <span className="text-xs text-center">{trackSettings[trackIndex].volume.toFixed(1)} dB</span>
+                </div>
+                <div className="grid gap-1">
+                  <label className="text-xs">Pitch</label>
+                  <Slider
+                    value={[trackSettings[trackIndex].pitch]}
+                    min={-1200}
+                    max={1200}
+                    step={50}
+                    onValueChange={(value) => handleTrackSettingChange(trackIndex, "pitch", value[0])}
+                  />
+                  <span className="text-xs text-center">{trackSettings[trackIndex].pitch} cents</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
