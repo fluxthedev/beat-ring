@@ -15,6 +15,7 @@ import { useMobile } from "@/hooks/use-mobile"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FileAudio, Music } from "lucide-react"
 import { KITS } from "@/lib/kits"
+import { Mixer } from "./mixer"
 
 // Define the sound samples
 const SAMPLES = [
@@ -1346,41 +1347,12 @@ export function BeatSequencer() {
           </div>
         </div>
 
-        {/* Mixer controls */}
-        <div className="grid gap-6 mt-4">
-          <h2 className="text-xl font-bold text-center">Mixer</h2>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-            {SAMPLES.map((sample, trackIndex) => (
-              <div key={trackIndex} className="grid gap-3 p-4 rounded-lg" style={{ backgroundColor: `${TRACK_COLORS[trackIndex]}33` }}>
-                <span className="text-sm font-bold" style={{ color: TRACK_COLORS[trackIndex] }}>
-                  {sample.name}
-                </span>
-                <div className="grid gap-1">
-                  <label className="text-xs">Volume</label>
-                  <Slider
-                    value={[trackSettings[trackIndex].volume]}
-                    min={-24}
-                    max={6}
-                    step={1}
-                    onValueChange={(value) => handleTrackSettingChange(trackIndex, "volume", value[0])}
-                  />
-                  <span className="text-xs text-center">{trackSettings[trackIndex].volume.toFixed(1)} dB</span>
-                </div>
-                <div className="grid gap-1">
-                  <label className="text-xs">Pitch</label>
-                  <Slider
-                    value={[trackSettings[trackIndex].pitch]}
-                    min={-1200}
-                    max={1200}
-                    step={50}
-                    onValueChange={(value) => handleTrackSettingChange(trackIndex, "pitch", value[0])}
-                  />
-                  <span className="text-xs text-center">{trackSettings[trackIndex].pitch} cents</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <Mixer
+          trackSettings={trackSettings}
+          handleTrackSettingChange={handleTrackSettingChange}
+          samples={SAMPLES}
+          trackColors={TRACK_COLORS}
+        />
 
         {/* Instructions */}
         <div className="text-sm text-muted-foreground mt-4">
