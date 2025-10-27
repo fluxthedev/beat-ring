@@ -127,6 +127,10 @@ export function BeatSequencer() {
 
   // Initialize Tone.js and create synthetic drum sounds
   useEffect(() => {
+    // When the kit changes, we need to reset the samples loaded flag
+    setSamplesLoaded(false)
+    setTrackSettings(INITIAL_TRACK_SETTINGS)
+
     let mounted = true
 
     const initializeAudio = async () => {
@@ -270,7 +274,7 @@ export function BeatSequencer() {
         }
       })
     }
-  }, [selectedKit]) // Empty dependency array to run only once
+  }, [selectedKit, handleTrackSettingChange])
 
   // Separate useEffect to update the sequence callback when pattern or metronome changes
   useEffect(() => {
