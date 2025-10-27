@@ -20,8 +20,8 @@ interface MixerProps {
     setting: "volume" | "pitch" | "reverb" | "delay" | "noise" | "effectsOn",
     value: number | boolean,
   ) => void
-  samples: { name: string; key: string }[]
-  trackColors: string[]
+  samples: ReadonlyArray<{ name: string; key: string }>
+  trackColors: ReadonlyArray<string>
 }
 
 export function Mixer({ trackSettings, handleTrackSettingChange, samples, trackColors }: MixerProps) {
