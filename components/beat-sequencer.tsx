@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import * as Tone from "tone"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
@@ -538,11 +538,13 @@ export function BeatSequencer() {
     event.target.value = ""
   }
 
-  const handleTrackSettingChange = (trackIndex: number, setting: keyof TrackSettings, value: number) => {
-    const newSettings = [...trackSettings]
-    newSettings[trackIndex] = { ...newSettings[trackIndex], [setting]: value }
-    setTrackSettings(newSettings)
-  }
+  const handleTrackSettingChange = useCallback((trackIndex: number, setting: keyof TrackSettings, value: number) => {
+    setTrackSettings((prevSettings) => {
+      const newSettings = [...prevSettings]
+      newSettings[trackIndex] = { ...newSettings[trackIndex], [setting]: value }
+      return newSettings
+    })
+  }, [])
 
   // Share pattern via URL
   const sharePattern = () => {
