@@ -607,161 +607,114 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
     }
 
     try {
-      const sampleRate = 44100
-      const duration = (60 / tempo) * 4 * (STEPS / 4)
-      const offlineContext = new OfflineAudioContext(2, sampleRate * duration, sampleRate)
       const stepDuration = 60 / tempo / 4
+      const duration = stepDuration * STEPS
+      const offlineDisposables: Array<{ dispose: () => void; disposed?: boolean }> = []
 
-      const createKickSound = (context: OfflineAudioContext, startTime: number) => {
-        const oscillator = context.createOscillator()
-        const gainNode = context.createGain()
+      const renderedBuffer = await Tone.Offline(() => {
+        Tone.Transport.cancel()
+        Tone.Transport.bpm.value = tempo
+        Tone.Transport.swing = swing / 100
+        Tone.Transport.swingSubdivision = "16n"
+        Tone.Transport.position = 0
 
-        oscillator.type = "sine"
-        oscillator.frequency.setValueAtTime(60, startTime)
-        oscillator.frequency.exponentialRampToValueAtTime(0.01, startTime + 0.5)
+        const kit = KITS[selectedKit as keyof typeof KITS] ?? KITS.Default
+        const offlineSynths: Record<string, any> = {}
 
-        gainNode.gain.setValueAtTime(0.3, startTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.5)
+        SAMPLES.forEach((sample, trackIndex) => {
+          const soundName = sample.name.toLowerCase()
+          const kitSound = kit[sample.name as keyof typeof kit] as
+            | { type: string; options?: any }
+            | undefined
 
-        oscillator.connect(gainNode)
-        gainNode.connect(context.destination)
+          if (!kitSound) return
 
-        oscillator.start(startTime)
-        oscillator.stop(startTime + 0.5)
-      }
+          const SynthClass = Tone[kitSound.type as keyof typeof Tone] as any
+          if (typeof SynthClass !== "function") return
 
-      const createSnareSound = (context: OfflineAudioContext, startTime: number) => {
-        const bufferSize = context.sampleRate * 0.2
-        const buffer = context.createBuffer(1, bufferSize, context.sampleRate)
-        const output = buffer.getChannelData(0)
+          const synth = new SynthClass(kitSound.options)
+          const reverb = new Tone.Reverb({ decay: 1.5, wet: 0 })
+          const delay = new Tone.FeedbackDelay("8n", 0.25)
+          delay.wet.value = 0
 
-        for (let i = 0; i < bufferSize; i++) {
-          output[i] = Math.random() * 2 - 1
-        }
+          const noise = new Tone.Noise("white").start(0)
+          const noiseGain = new Tone.Gain(0)
+          noise.connect(noiseGain)
+          noiseGain.toDestination()
 
-        const noise = context.createBufferSource()
-        const filter = context.createBiquadFilter()
-        const gainNode = context.createGain()
+          synth.chain(reverb, delay, Tone.Destination)
 
-        noise.buffer = buffer
-        filter.type = "bandpass"
-        filter.frequency.value = 3000
-        filter.Q.value = 1
+          offlineDisposables.push(synth, reverb, delay, noise, noiseGain)
 
-        gainNode.gain.setValueAtTime(0.2, startTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.2)
+          const settings = trackSettings[trackIndex]
+          if (settings) {
+            synth.volume.value = settings.volume
 
-        noise.connect(filter)
-        filter.connect(gainNode)
-        gainNode.connect(context.destination)
-
-        noise.start(startTime)
-        noise.stop(startTime + 0.2)
-      }
-
-      const createHihatSound = (context: OfflineAudioContext, startTime: number) => {
-        const bufferSize = context.sampleRate * 0.1
-        const buffer = context.createBuffer(1, bufferSize, context.sampleRate)
-        const output = buffer.getChannelData(0)
-
-        for (let i = 0; i < bufferSize; i++) {
-          output[i] = Math.random() * 2 - 1
-        }
-
-        const noise = context.createBufferSource()
-        const filter = context.createBiquadFilter()
-        const gainNode = context.createGain()
-
-        noise.buffer = buffer
-        filter.type = "highpass"
-        filter.frequency.value = 8000
-
-        gainNode.gain.setValueAtTime(0.1, startTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.1)
-
-        noise.connect(filter)
-        filter.connect(gainNode)
-        gainNode.connect(context.destination)
-
-        noise.start(startTime)
-        noise.stop(startTime + 0.1)
-      }
-
-      const createClapSound = (context: OfflineAudioContext, startTime: number) => {
-        const bufferSize = context.sampleRate * 0.15
-        const buffer = context.createBuffer(1, bufferSize, context.sampleRate)
-        const output = buffer.getChannelData(0)
-
-        for (let i = 0; i < bufferSize; i++) {
-          output[i] = (Math.random() * 2 - 1) * 0.5
-        }
-
-        const noise = context.createBufferSource()
-        const filter = context.createBiquadFilter()
-        const gainNode = context.createGain()
-
-        noise.buffer = buffer
-        filter.type = "highpass"
-        filter.frequency.value = 2000
-
-        gainNode.gain.setValueAtTime(0.15, startTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.15)
-
-        noise.connect(filter)
-        filter.connect(gainNode)
-        gainNode.connect(context.destination)
-
-        noise.start(startTime)
-        noise.stop(startTime + 0.15)
-      }
-
-      const createTomSound = (context: OfflineAudioContext, startTime: number) => {
-        const oscillator = context.createOscillator()
-        const gainNode = context.createGain()
-
-        oscillator.type = "sine"
-        oscillator.frequency.setValueAtTime(200, startTime)
-        oscillator.frequency.exponentialRampToValueAtTime(50, startTime + 0.3)
-
-        gainNode.gain.setValueAtTime(0.2, startTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3)
-
-        oscillator.connect(gainNode)
-        gainNode.connect(context.destination)
-
-        oscillator.start(startTime)
-        oscillator.stop(startTime + 0.3)
-      }
-
-      for (let step = 0; step < STEPS; step++) {
-        const stepTime = step * stepDuration
-
-        pattern.forEach((track, trackIndex) => {
-          if (track[step]) {
-            const soundName = SAMPLES[trackIndex].name.toLowerCase()
-
-            switch (soundName) {
-              case "kick":
-                createKickSound(offlineContext, stepTime)
-                break
-              case "snare":
-                createSnareSound(offlineContext, stepTime)
-                break
-              case "hi-hat":
-                createHihatSound(offlineContext, stepTime)
-                break
-              case "clap":
-                createClapSound(offlineContext, stepTime)
-                break
-              case "tom":
-                createTomSound(offlineContext, stepTime)
-                break
+            const pitchInCents = settings.pitch
+            if ("detune" in synth && synth.detune) {
+              synth.detune.value = pitchInCents
+            } else if (synth instanceof Tone.NoiseSynth) {
+              const initialPlaybackRate =
+                ((kitSound.options as any)?.noise?.playbackRate as number | undefined) ?? 1
+              synth.noise.playbackRate = initialPlaybackRate * 2 ** (pitchInCents / 1200)
             }
-          }
-        })
-      }
 
-      const renderedBuffer = await offlineContext.startRendering()
+            reverb.wet.value = settings.effectsOn ? settings.reverb : 0
+            delay.wet.value = settings.effectsOn ? settings.delay : 0
+            noiseGain.gain.value = settings.effectsOn ? settings.noise : 0
+          }
+
+          offlineSynths[soundName] = synth
+
+          noise.stop(duration)
+        })
+
+        const sequence = new Tone.Sequence(
+          (time, step) => {
+            pattern.forEach((track, trackIndex) => {
+              if (!track[step]) return
+
+              const soundName = SAMPLES[trackIndex].name.toLowerCase()
+              const synth = offlineSynths[soundName]
+              if (!synth) return
+
+              try {
+                if (soundName === "kick") {
+                  synth.triggerAttackRelease("C1", "8n", time)
+                } else if (soundName === "snare") {
+                  synth.triggerAttackRelease("8n", time)
+                } else if (soundName === "hi-hat") {
+                  synth.triggerAttackRelease("32n", time)
+                } else if (soundName === "clap") {
+                  synth.triggerAttackRelease("8n", time)
+                } else if (soundName === "tom") {
+                  synth.triggerAttackRelease("G2", "8n", time)
+                }
+              } catch (playError) {
+                console.warn(`Error triggering ${soundName} during export:`, playError)
+              }
+            })
+          },
+          Array.from({ length: STEPS }, (_, i) => i),
+          "16n",
+        )
+
+        offlineDisposables.push(sequence)
+
+        sequence.start(0)
+        Tone.Transport.start(0)
+      }, duration)
+
+      offlineDisposables.forEach((node) => {
+        try {
+          if (node && typeof node.dispose === "function" && !node.disposed) {
+            node.dispose()
+          }
+        } catch (disposeError) {
+          console.warn("Error disposing offline node:", disposeError)
+        }
+      })
+
       const wavBuffer = audioBufferToWav(renderedBuffer)
       const blob = new Blob([wavBuffer], { type: "audio/wav" })
 
@@ -784,7 +737,16 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
         variant: "destructive",
       })
     }
-  }, [audioBufferToWav, pattern, samplesLoaded, tempo, toast])
+  }, [
+    audioBufferToWav,
+    pattern,
+    samplesLoaded,
+    selectedKit,
+    swing,
+    tempo,
+    toast,
+    trackSettings,
+  ])
 
   const encodeVariableLength = useCallback((value: number): number[] => {
     if (value === 0) return [0]
