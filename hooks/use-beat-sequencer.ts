@@ -22,6 +22,42 @@ interface UseBeatSequencerOptions {
 
 const clonePattern = (pattern: boolean[][]) => pattern.map((row) => [...row])
 
+const uint8ToBase64 = (bytes: Uint8Array) => {
+  let binary = ""
+  const chunkSize = 0x8000
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+
+  return btoa(binary)
+}
+
+const base64ToUint8 = (base64: string) => {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+
+  return bytes
+}
+
+const bytesToString = (bytes: Uint8Array) => {
+  if (typeof TextDecoder !== "undefined") {
+    return new TextDecoder().decode(bytes)
+  }
+
+  let result = ""
+
+  bytes.forEach((byte) => {
+    result += String.fromCharCode(byte)
+  })
+
+  return result
+}
+
 export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
@@ -149,8 +185,8 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
           const kitSound = kit[sample.name as keyof typeof kit]
           if (kitSound) {
             const SynthClass = Tone[kitSound.type as keyof typeof Tone]
-            if (SynthClass) {
-              const synth = new SynthClass(kitSound.options)
+            if (typeof SynthClass === "function") {
+              const synth = new (SynthClass as new (...args: any[]) => any)(kitSound.options)
               const reverb = new Tone.Reverb({ decay: 1.5, wet: 0 })
               const delay = new Tone.FeedbackDelay("8n", 0.25)
               delay.wet.value = 0
@@ -539,8 +575,8 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
     }
 
     const jsonString = JSON.stringify(data)
-    const compressed = pako.deflate(jsonString, { to: "string" })
-    const encoded = btoa(compressed)
+    const compressed = pako.deflate(jsonString)
+    const encoded = uint8ToBase64(compressed)
     const url = `${window.location.origin}${window.location.pathname}?pattern=${encodeURIComponent(encoded)}`
 
     navigator.clipboard.writeText(url).then(() => {
@@ -880,13 +916,22 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
 
     if (patternParam) {
       try {
-        const decoded = atob(decodeURIComponent(patternParam))
-        let jsonString
+        const base64 = decodeURIComponent(patternParam)
+        let jsonString: string
 
         try {
-          jsonString = pako.inflate(decoded, { to: "string" })
-        } catch (e) {
-          jsonString = decoded
+          const decodedBytes = base64ToUint8(base64)
+          let bytes: Uint8Array
+
+          try {
+            bytes = pako.inflate(decodedBytes)
+          } catch (error) {
+            bytes = decodedBytes
+          }
+
+          jsonString = bytesToString(bytes)
+        } catch (error) {
+          jsonString = base64
         }
 
         const data = JSON.parse(jsonString)
