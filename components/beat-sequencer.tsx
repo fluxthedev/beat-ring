@@ -475,6 +475,7 @@ export function BeatSequencer() {
       selectedKit,
       metronome,
       quantize,
+      trackSettings,
     }
 
     // Create a data URL
@@ -508,6 +509,7 @@ export function BeatSequencer() {
         setSelectedKit(data.selectedKit || "Default")
         setMetronome(data.metronome || false)
         setQuantize(data.quantize || true)
+        setTrackSettings(data.trackSettings || INITIAL_TRACK_SETTINGS)
 
         // Reset history with this new pattern
         setHistory([data.pattern])
@@ -546,6 +548,7 @@ export function BeatSequencer() {
       selectedKit,
       metronome,
       quantize,
+      trackSettings,
     }
 
     // Create a compressed URL parameter
@@ -963,6 +966,7 @@ export function BeatSequencer() {
         setSelectedKit(data.selectedKit || "Default")
         setMetronome(data.metronome || false)
         setQuantize(data.quantize || true)
+        setTrackSettings(data.trackSettings || INITIAL_TRACK_SETTINGS)
 
         // Reset history with this new pattern
         setHistory([data.pattern])
