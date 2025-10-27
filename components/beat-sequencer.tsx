@@ -274,7 +274,7 @@ export function BeatSequencer() {
         }
       })
     }
-  }, [selectedKit])
+  }, [selectedKit, handleTrackSettingChange])
 
   // Separate useEffect to update the sequence callback when pattern or metronome changes
   useEffect(() => {
