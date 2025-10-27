@@ -61,8 +61,9 @@ export function Mixer({ trackSettings, handleTrackSettingChange, samples, trackC
                 id={`effectsOn-${trackIndex}`}
                 checked={trackSettings[trackIndex].effectsOn}
                 onCheckedChange={(value) => handleTrackSettingChange(trackIndex, "effectsOn", value)}
+                className="transform scale-125"
               />
-              <label htmlFor={`effectsOn-${trackIndex}`} className="text-xs">
+              <label htmlFor={`effectsOn-${trackIndex}`} className="text-sm pl-2">
                 Effects
               </label>
             </div>

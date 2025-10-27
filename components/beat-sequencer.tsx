@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useEffect, useRef, useState } from "react"
 import * as Tone from "tone"
+import pako from "pako"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
@@ -151,133 +152,101 @@ export function BeatSequencer() {
 
   // Initialize Tone.js and create synthetic drum sounds
   useEffect(() => {
-    setTrackSettings(INITIAL_TRACK_SETTINGS)
     let mounted = true
+    setSamplesLoaded(false)
+    setLoadingError(null)
 
     const initializeAudio = async () => {
       try {
-        // Ensure we're in a browser environment
-        if (typeof window === "undefined") {
-          throw new Error("Audio initialization requires browser environment")
+        if (typeof window === "undefined" || !mounted) return
+
+        // Cleanup previous instances
+        Tone.Transport.cancel()
+        if (sequencerRef.current) {
+          sequencerRef.current.dispose()
         }
+        Object.values(synthsRef.current).forEach((s) => s.dispose())
+        Object.values(effectsRef.current).forEach((e) => {
+          Object.values(e).forEach((fx: any) => fx.dispose())
+        })
 
         // Set initial transport values
         Tone.Transport.bpm.value = tempo
         Tone.Transport.swing = swing / 100
 
-        // Create synthetic drum sounds using Tone.js with error handling
         const synths: Record<string, any> = {}
+        const effects: Record<string, any> = {}
         const kit = KITS[selectedKit as keyof typeof KITS]
 
-        try {
-          SAMPLES.forEach((sample) => {
-            const soundName = sample.name.toLowerCase()
-            const kitSound = kit[sample.name as keyof typeof kit]
-            if (kitSound) {
-              const SynthClass = Tone[kitSound.type as keyof typeof Tone]
-              if (SynthClass) {
-                const synth = new SynthClass(kitSound.options)
-                const reverb = new Tone.Reverb()
-                const delay = new Tone.FeedbackDelay()
-                synth.chain(reverb, delay, Tone.Destination)
-                synths[soundName] = synth
+        SAMPLES.forEach((sample) => {
+          const soundName = sample.name.toLowerCase()
+          const kitSound = kit[sample.name as keyof typeof kit]
+          if (kitSound) {
+            const SynthClass = Tone[kitSound.type as keyof typeof Tone]
+            if (SynthClass) {
+              const synth = new SynthClass(kitSound.options)
+              const reverb = new Tone.Reverb({ decay: 1.5, wet: 0 })
+              const delay = new Tone.FeedbackDelay("8n", 0.25)
+              delay.wet.value = 0
 
-                // Handle noise separately as a parallel source
-                const noise = new Tone.Noise("white").start()
-                const noiseGain = new Tone.Gain(0).toDestination()
-                noise.connect(noiseGain)
+              const noise = new Tone.Noise("white").start()
+              const noiseGain = new Tone.Gain(0)
+              noise.connect(noiseGain)
 
-                effectsRef.current[soundName] = { reverb, delay, noise: noiseGain, noiseSource: noise }
-              }
+              synth.chain(reverb, delay, Tone.Destination)
+              noiseGain.toDestination()
+
+              synths[soundName] = synth
+              effects[soundName] = { reverb, delay, noise: noiseGain, noiseSource: noise }
             }
-          })
+          }
+        })
 
-          // Metronome - simple sine wave
-          synths.metronome = new Tone.Synth({
-            oscillator: {
-              type: "sine",
-            },
-            envelope: {
-              attack: 0.001,
-              decay: 0.1,
-              sustain: 0.01,
-              release: 0.1,
-            },
-          }).toDestination()
-        } catch (synthError) {
-          console.error("Error creating synthesizers:", synthError)
-          throw new Error("Failed to create audio synthesizers")
-        }
-
+        synths.metronome = new Tone.Synth().toDestination()
         if (!mounted) return
 
         synthsRef.current = synths
+        effectsRef.current = effects
 
-        try {
-          // Create a sequence with error handling
-          const sequence = new Tone.Sequence(
-            (time, step) => {
-              if (!mounted) return
-
-              setCurrentStep(step)
-
-              // Play sounds for this step
-              pattern.forEach((track, trackIndex) => {
-                if (track[step]) {
-                  const soundName = SAMPLES[trackIndex].name.toLowerCase()
-                  const synth = synthsRef.current[soundName]
-                  if (synth) {
-                    try {
-                      if (soundName === "kick") {
-                        synth.triggerAttackRelease("C1", "8n", time)
-                      } else if (soundName === "snare") {
-                        synth.triggerAttackRelease("8n", time)
-                      } else if (soundName === "hi-hat") {
-                        synth.triggerAttackRelease("32n", time)
-                      } else if (soundName === "clap") {
-                        synth.triggerAttackRelease("8n", time)
-                      } else if (soundName === "tom") {
-                        synth.triggerAttackRelease("G2", "8n", time)
-                      }
-                    } catch (playError) {
-                      console.warn(`Error playing ${soundName}:`, playError)
-                    }
-                  }
-                }
-              })
-
-              // Play metronome on first beat of each bar (every 4 steps)
-              if (metronome && step % 4 === 0) {
-                const metronomesynth = synthsRef.current["metronome"]
-                if (metronomesynth) {
+        const sequence = new Tone.Sequence(
+          (time, step) => {
+            if (!mounted) return
+            setCurrentStep(step)
+            pattern.forEach((track, trackIndex) => {
+              if (track[step]) {
+                const soundName = SAMPLES[trackIndex].name.toLowerCase()
+                const synth = synthsRef.current[soundName]
+                if (synth) {
                   try {
-                    metronomesynth.triggerAttackRelease("C5", "32n", time)
-                  } catch (metronomeError) {
-                    console.warn("Error playing metronome:", metronomeError)
+                    if (soundName === "kick") synth.triggerAttackRelease("C1", "8n", time)
+                    else if (soundName === "snare") synth.triggerAttackRelease("8n", time)
+                    else if (soundName === "hi-hat") synth.triggerAttackRelease("32n", time)
+                    else if (soundName === "clap") synth.triggerAttackRelease("8n", time)
+                    else if (soundName === "tom") synth.triggerAttackRelease("G2", "8n", time)
+                  } catch (e) {
+                    /* ignore */
                   }
                 }
               }
-            },
-            Array.from({ length: STEPS }, (_, i) => i),
-            "16n",
-          )
+            })
+            if (metronome && step % 4 === 0) {
+              synthsRef.current["metronome"]?.triggerAttackRelease("C5", "32n", time)
+            }
+          },
+          Array.from({ length: STEPS }, (_, i) => i),
+          "16n",
+        )
+        sequencerRef.current = sequence
 
-          sequencerRef.current = sequence
-        } catch (sequenceError) {
-          console.error("Error creating sequence:", sequenceError)
-          throw new Error("Failed to create audio sequence")
+        if (mounted) {
+          setSamplesLoaded(true)
+          setLoadingError(null)
         }
-
-        setSamplesLoaded(true)
-        setLoadingError(null)
       } catch (error) {
-        if (!mounted) return
-        console.error("Error initializing audio:", error)
-        const errorMessage = error instanceof Error ? error.message : "Failed to initialize audio"
-        setLoadingError(errorMessage)
-
-        // Still set samplesLoaded to true so the UI is usable, just without audio
-        setSamplesLoaded(true)
+        if (mounted) {
+          setLoadingError(error instanceof Error ? error.message : "Failed to initialize audio")
+          setSamplesLoaded(true) // Allow UI interaction
+        }
       }
     }
 
@@ -285,37 +254,19 @@ export function BeatSequencer() {
 
     return () => {
       mounted = false
-
-      // Proper cleanup order
-      if (Tone.Transport.state === "started") {
-        Tone.Transport.stop()
-      }
-
-      if (sequencerRef.current && sequencerRef.current.state === "started") {
-        sequencerRef.current.stop()
-      }
-
       if (sequencerRef.current) {
         sequencerRef.current.dispose()
       }
-
-      // Dispose all synths
       Object.values(synthsRef.current).forEach((synth) => {
-        if (synth && synth.dispose) {
-          synth.dispose()
-        }
+        if (synth && !synth.disposed) synth.dispose()
       })
-
-      // Dispose all effects
       Object.values(effectsRef.current).forEach((effectGroup) => {
-        Object.values(effectGroup).forEach((effect) => {
-          if (effect && effect.dispose) {
-            effect.dispose()
-          }
+        Object.values(effectGroup).forEach((effect: any) => {
+          if (effect && !effect.disposed) effect.dispose()
         })
       })
     }
-  }, [selectedKit]) // Empty dependency array to run only once
+  }, [selectedKit, tempo, swing])
 
   // Separate useEffect to update the sequence callback when pattern or metronome changes
   useEffect(() => {
@@ -549,18 +500,7 @@ export function BeatSequencer() {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target?.result as string)
-        setPattern(data.pattern)
-        setTempo(data.tempo || INITIAL_TEMPO)
-        setSwing(data.swing || 0)
-        setSelectedKit(data.selectedKit || "Default")
-        setMetronome(data.metronome || false)
-        setQuantize(data.quantize || true)
-        setTrackSettings(data.trackSettings || INITIAL_TRACK_SETTINGS)
-
-        // Reset history with this new pattern
-        setHistory([data.pattern])
-        setHistoryIndex(0)
-
+        processLoadedData(data)
         toast({
           title: "Pattern loaded",
           description: "Your beat pattern has been loaded successfully.",
@@ -589,6 +529,28 @@ export function BeatSequencer() {
     setTrackSettings(newSettings)
   }
 
+  const processLoadedData = (data: any) => {
+    if (!data || !data.pattern) return
+
+    setPattern(data.pattern)
+    setTempo(data.tempo ?? INITIAL_TEMPO)
+    setSwing(data.swing ?? 0)
+    setSelectedKit(data.selectedKit ?? "Default")
+    setMetronome(data.metronome ?? false)
+    setQuantize(data.quantize ?? true)
+    const loadedTrackSettings = data.trackSettings
+      ? data.trackSettings.map((loaded: Partial<TrackSettings>, i: number) => ({
+          ...(INITIAL_TRACK_SETTINGS[i] || {}),
+          ...loaded,
+        }))
+      : INITIAL_TRACK_SETTINGS
+    setTrackSettings(loadedTrackSettings)
+
+    // Reset history with this new pattern
+    setHistory([data.pattern])
+    setHistoryIndex(0)
+  }
+
   // Share pattern via URL
   const sharePattern = () => {
     const data = {
@@ -603,8 +565,9 @@ export function BeatSequencer() {
 
     // Create a compressed URL parameter
     const jsonString = JSON.stringify(data)
-    const compressedData = btoa(jsonString)
-    const url = `${window.location.origin}${window.location.pathname}?pattern=${encodeURIComponent(compressedData)}`
+    const compressed = pako.deflate(jsonString, { to: "string" })
+    const encoded = btoa(compressed)
+    const url = `${window.location.origin}${window.location.pathname}?pattern=${encodeURIComponent(encoded)}`
 
     // Copy to clipboard
     navigator.clipboard.writeText(url).then(() => {
@@ -1007,27 +970,29 @@ export function BeatSequencer() {
 
     if (patternParam) {
       try {
-        const jsonString = atob(decodeURIComponent(patternParam))
+        const decoded = atob(decodeURIComponent(patternParam))
+        let jsonString
+
+        // Try to decompress, if it fails, assume it's the old format
+        try {
+          jsonString = pako.inflate(decoded, { to: "string" })
+        } catch (e) {
+          jsonString = decoded // Old format
+        }
+
         const data = JSON.parse(jsonString)
-
-        setPattern(data.pattern)
-        setTempo(data.tempo || INITIAL_TEMPO)
-        setSwing(data.swing || 0)
-        setSelectedKit(data.selectedKit || "Default")
-        setMetronome(data.metronome || false)
-        setQuantize(data.quantize || true)
-        setTrackSettings(data.trackSettings || INITIAL_TRACK_SETTINGS)
-
-        // Reset history with this new pattern
-        setHistory([data.pattern])
-        setHistoryIndex(0)
-
+        processLoadedData(data)
         toast({
           title: "Pattern loaded from URL",
           description: "A shared beat pattern has been loaded.",
         })
       } catch (error) {
         console.error("Error loading pattern from URL", error)
+        toast({
+          title: "Error loading pattern from URL",
+          description: "The shared URL is invalid or corrupted.",
+          variant: "destructive",
+        })
       }
     }
   }, [])
@@ -1231,8 +1196,9 @@ export function BeatSequencer() {
     // Calculate track index from distance
     for (let trackIndex = 0; trackIndex < SAMPLES.length; trackIndex++) {
       const trackRadius = maxRadius * (0.9 - trackIndex * 0.15)
-      const radiusMin = trackRadius - 20
-      const radiusMax = trackRadius + 20
+      const touchRadius = isMobile ? 30 : 20 // Larger radius for mobile
+      const radiusMin = trackRadius - touchRadius
+      const radiusMax = trackRadius + touchRadius
 
       if (distance >= radiusMin && distance <= radiusMax) {
         // Toggle this step
@@ -1297,47 +1263,56 @@ export function BeatSequencer() {
 
       <div className="w-full max-w-[800px] grid gap-6">
         {/* Main controls */}
-        <div className="flex flex-wrap gap-2 justify-center">
-          <Button onClick={togglePlay} className="flex items-center gap-2" disabled={!samplesLoaded}>
-            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        <div className="flex flex-wrap gap-4 justify-center">
+          <Button
+            onClick={togglePlay}
+            className="flex items-center gap-2 p-6 text-lg"
+            disabled={!samplesLoaded}
+          >
+            {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
             {isPlaying ? "Pause" : "Play"}
           </Button>
 
-          <Button onClick={handleUndo} variant="outline" disabled={historyIndex === 0}>
-            <Undo2 className="h-4 w-4 mr-2" />
+          <Button onClick={handleUndo} variant="outline" className="p-4 text-md" disabled={historyIndex === 0}>
+            <Undo2 className="h-5 w-5 mr-2" />
             Undo
           </Button>
 
-          <Button onClick={handleClear} variant="outline">
-            <Trash2 className="h-4 w-4 mr-2" />
+          <Button onClick={handleClear} variant="outline" className="p-4 text-md">
+            <Trash2 className="h-5 w-5 mr-2" />
             Clear
           </Button>
 
-          <Button onClick={savePattern} variant="outline">
-            <Save className="h-4 w-4 mr-2" />
+          <Button onClick={savePattern} variant="outline" className="p-4 text-md">
+            <Save className="h-5 w-5 mr-2" />
             Save
           </Button>
 
-          <Button onClick={sharePattern} variant="outline">
-            <Download className="h-4 w-4 mr-2" />
+          <Button onClick={sharePattern} variant="outline" className="p-4 text-md">
+            <Download className="h-5 w-5 mr-2" />
             Share URL
           </Button>
 
           <div className="relative">
-            <Button variant="outline" as="label" htmlFor="load-pattern" className="cursor-pointer">
-              <Upload className="h-4 w-4 mr-2" />
+            <Button
+              variant="outline"
+              as="label"
+              htmlFor="load-pattern"
+              className="cursor-pointer p-4 text-md"
+            >
+              <Upload className="h-5 w-5 mr-2" />
               Load
             </Button>
             <input id="load-pattern" type="file" accept=".json" className="sr-only" onChange={loadPattern} />
           </div>
 
-          <Button onClick={exportWAV} variant="outline">
-            <FileAudio className="h-4 w-4 mr-2" />
+          <Button onClick={exportWAV} variant="outline" className="p-4 text-md">
+            <FileAudio className="h-5 w-5 mr-2" />
             Export WAV
           </Button>
 
-          <Button onClick={exportMIDI} variant="outline">
-            <Music className="h-4 w-4 mr-2" />
+          <Button onClick={exportMIDI} variant="outline" className="p-4 text-md">
+            <Music className="h-5 w-5 mr-2" />
             Export MIDI
           </Button>
 
