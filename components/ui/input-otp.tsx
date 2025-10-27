@@ -35,7 +35,18 @@ const InputOTPSlot = React.forwardRef<
   React.ComponentPropsWithoutRef<"div"> & { index: number }
 >(({ index, className, ...props }, ref) => {
   const inputOTPContext = React.useContext(OTPInputContext)
-  const { char, hasFakeCaret, isActive } = inputOTPContext.slots[index]
+
+  if (!inputOTPContext) {
+    throw new Error("InputOTPSlot must be used within an InputOTP component")
+  }
+
+  const slot = inputOTPContext.slots[index]
+
+  if (!slot) {
+    throw new Error(`No slot found for index ${index}`)
+  }
+
+  const { char, hasFakeCaret, isActive } = slot
 
   return (
     <div
