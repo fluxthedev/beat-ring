@@ -234,7 +234,7 @@ export const KITS = {
           "attack": 0.001,
           "decay": 0.4,
           "sustain": 0.01,
-.          "release": 1.4,
+          "release": 1.4,
           "attackCurve": "exponential"
         }
       }
