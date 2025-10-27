@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import * as Tone from "tone"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
@@ -127,6 +127,10 @@ export function BeatSequencer() {
 
   // Initialize Tone.js and create synthetic drum sounds
   useEffect(() => {
+    // When the kit changes, we need to reset the samples loaded flag
+    setSamplesLoaded(false)
+    setTrackSettings(INITIAL_TRACK_SETTINGS)
+
     let mounted = true
 
     const initializeAudio = async () => {
@@ -270,7 +274,7 @@ export function BeatSequencer() {
         }
       })
     }
-  }, [selectedKit]) // Empty dependency array to run only once
+  }, [selectedKit])
 
   // Separate useEffect to update the sequence callback when pattern or metronome changes
   useEffect(() => {
@@ -534,11 +538,13 @@ export function BeatSequencer() {
     event.target.value = ""
   }
 
-  const handleTrackSettingChange = (trackIndex: number, setting: keyof TrackSettings, value: number) => {
-    const newSettings = [...trackSettings]
-    newSettings[trackIndex] = { ...newSettings[trackIndex], [setting]: value }
-    setTrackSettings(newSettings)
-  }
+  const handleTrackSettingChange = useCallback((trackIndex: number, setting: keyof TrackSettings, value: number) => {
+    setTrackSettings((prevSettings) => {
+      const newSettings = [...prevSettings]
+      newSettings[trackIndex] = { ...newSettings[trackIndex], [setting]: value }
+      return newSettings
+    })
+  }, [])
 
   // Share pattern via URL
   const sharePattern = () => {
