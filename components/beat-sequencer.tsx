@@ -816,30 +816,37 @@ export function BeatSequencer() {
       let currentTick = 0
       for (let step = 0; step < STEPS; step++) {
         const stepTick = step * ticksPerStep
-        const deltaTime = stepTick - currentTick
+        let stepHasNoteOn = false
 
         pattern.forEach((track, trackIndex) => {
           if (track[step]) {
             const soundName = SAMPLES[trackIndex].name.toLowerCase() as keyof typeof drumNotes
             const note = drumNotes[soundName]
 
+            // Calculate delta so additional notes in the same step fire simultaneously
+            const noteOnDelta = stepHasNoteOn ? 0 : stepTick - currentTick
+
             // Add note on event
             events.push(
-              ...encodeVariableLength(deltaTime),
+              ...encodeVariableLength(noteOnDelta),
               0x99, // Note on, channel 10 (drums)
               note,
               100, // Velocity
             )
 
+            stepHasNoteOn = true
+
+            const noteDuration = 60
+
             // Add note off event after short duration
             events.push(
-              ...encodeVariableLength(60), // Short duration
+              ...encodeVariableLength(noteDuration),
               0x89, // Note off, channel 10
               note,
               0, // Velocity
             )
 
-            currentTick = stepTick + 60
+            currentTick = stepTick + noteDuration
           }
         })
       }
