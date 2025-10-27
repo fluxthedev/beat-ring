@@ -80,6 +80,14 @@ export function BeatSequencer() {
   const [samplesLoaded, setSamplesLoaded] = useState(false)
   const [loadingError, setLoadingError] = useState<string | null>(null)
 
+  const handleTrackSettingChange = useCallback((trackIndex: number, setting: keyof TrackSettings, value: number) => {
+    setTrackSettings((prevSettings) => {
+      const newSettings = [...prevSettings]
+      newSettings[trackIndex] = { ...newSettings[trackIndex], [setting]: value }
+      return newSettings
+    })
+  }, [])
+
   // Update swing when it changes
   useEffect(() => {
     Tone.Transport.swing = swing / 100
@@ -93,7 +101,9 @@ export function BeatSequencer() {
 
   // Update synth settings when they change
   useEffect(() => {
-    if (!samplesLoaded) return
+    if (!samplesLoaded) {
+      return
+    }
 
     const kit = KITS[selectedKit as keyof typeof KITS]
 
@@ -274,7 +284,7 @@ export function BeatSequencer() {
         }
       })
     }
-  }, [selectedKit, handleTrackSettingChange])
+  }, [selectedKit])
 
   // Separate useEffect to update the sequence callback when pattern or metronome changes
   useEffect(() => {
@@ -326,6 +336,51 @@ export function BeatSequencer() {
       }
     }
   }, [pattern, metronome, samplesLoaded])
+
+  // Add to history
+  const addToHistory = (newPattern: boolean[][]) => {
+    const newHistory = [...history.slice(0, historyIndex + 1), JSON.parse(JSON.stringify(newPattern))]
+    setHistory(newHistory)
+    setHistoryIndex(newHistory.length - 1)
+  }
+
+  // Toggle a step in the pattern
+  const toggleStep = (trackIndex: number, stepIndex: number) => {
+    const newPattern = [...pattern]
+    newPattern[trackIndex] = [...pattern[trackIndex]]
+    newPattern[trackIndex][stepIndex] = !newPattern[trackIndex][stepIndex]
+
+    setPattern(newPattern)
+    addToHistory(newPattern)
+
+    // If we're not playing, play the sound immediately for feedback
+    if (!isPlaying && samplesLoaded) {
+      const soundName = SAMPLES[trackIndex].name.toLowerCase()
+      const synth = synthsRef.current[soundName]
+      if (synth) {
+        if (soundName === "kick") {
+          synth.triggerAttackRelease("C1", "8n")
+        } else if (soundName === "snare") {
+          synth.triggerAttackRelease("8n")
+        } else if (soundName === "hi-hat") {
+          synth.triggerAttackRelease("32n")
+        } else if (soundName === "clap") {
+          synth.triggerAttackRelease("8n")
+        } else if (soundName === "tom") {
+          synth.triggerAttackRelease("G2", "8n")
+        }
+      }
+    }
+
+    // Provide haptic feedback on mobile devices if supported
+    if (isMobile && "vibrate" in navigator) {
+      try {
+        navigator.vibrate(50) // Short vibration for feedback
+      } catch (e) {
+        // Ignore errors if vibration is not supported
+      }
+    }
+  }
 
   // Handle play/pause
   const togglePlay = async () => {
@@ -426,51 +481,6 @@ export function BeatSequencer() {
     }
   }
 
-  // Add to history
-  const addToHistory = (newPattern: boolean[][]) => {
-    const newHistory = [...history.slice(0, historyIndex + 1), JSON.parse(JSON.stringify(newPattern))]
-    setHistory(newHistory)
-    setHistoryIndex(newHistory.length - 1)
-  }
-
-  // Toggle a step in the pattern
-  const toggleStep = (trackIndex: number, stepIndex: number) => {
-    const newPattern = [...pattern]
-    newPattern[trackIndex] = [...pattern[trackIndex]]
-    newPattern[trackIndex][stepIndex] = !newPattern[trackIndex][stepIndex]
-
-    setPattern(newPattern)
-    addToHistory(newPattern)
-
-    // If we're not playing, play the sound immediately for feedback
-    if (!isPlaying && samplesLoaded) {
-      const soundName = SAMPLES[trackIndex].name.toLowerCase()
-      const synth = synthsRef.current[soundName]
-      if (synth) {
-        if (soundName === "kick") {
-          synth.triggerAttackRelease("C1", "8n")
-        } else if (soundName === "snare") {
-          synth.triggerAttackRelease("8n")
-        } else if (soundName === "hi-hat") {
-          synth.triggerAttackRelease("32n")
-        } else if (soundName === "clap") {
-          synth.triggerAttackRelease("8n")
-        } else if (soundName === "tom") {
-          synth.triggerAttackRelease("G2", "8n")
-        }
-      }
-    }
-
-    // Provide haptic feedback on mobile devices if supported
-    if (isMobile && "vibrate" in navigator) {
-      try {
-        navigator.vibrate(50) // Short vibration for feedback
-      } catch (e) {
-        // Ignore errors if vibration is not supported
-      }
-    }
-  }
-
   // Save pattern as JSON
   const savePattern = () => {
     const data = {
@@ -537,14 +547,6 @@ export function BeatSequencer() {
     // Reset the input
     event.target.value = ""
   }
-
-  const handleTrackSettingChange = useCallback((trackIndex: number, setting: keyof TrackSettings, value: number) => {
-    setTrackSettings((prevSettings) => {
-      const newSettings = [...prevSettings]
-      newSettings[trackIndex] = { ...newSettings[trackIndex], [setting]: value }
-      return newSettings
-    })
-  }, [])
 
   // Share pattern via URL
   const sharePattern = () => {
