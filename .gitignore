@@ -25,7 +25,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# local development
-dev_server.log
-jules-scratch/
