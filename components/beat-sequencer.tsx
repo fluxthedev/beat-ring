@@ -68,6 +68,7 @@ export function BeatSequencer() {
   // Update swing when it changes
   useEffect(() => {
     Tone.Transport.swing = swing / 100
+    Tone.Transport.swingSubdivision = "16n"
   }, [swing])
 
   // Update tempo when it changes
