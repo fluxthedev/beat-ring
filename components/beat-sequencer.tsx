@@ -49,11 +49,19 @@ const INITIAL_PATTERN = Array(SAMPLES.length)
 interface TrackSettings {
   volume: number
   pitch: number
+  reverb: number
+  delay: number
+  noise: number
+  effectsOn: boolean
 }
 
 const INITIAL_TRACK_SETTINGS: TrackSettings[] = SAMPLES.map(() => ({
   volume: 0, // 0 dB
   pitch: 0, // 0 cents offset
+  reverb: 0,
+  delay: 0,
+  noise: 0,
+  effectsOn: false,
 }))
 
 export function BeatSequencer() {
@@ -76,6 +84,7 @@ export function BeatSequencer() {
 
   // References for audio elements
   const synthsRef = useRef<Record<string, any>>({})
+  const effectsRef = useRef<Record<string, any>>({})
   const sequencerRef = useRef<Tone.Sequence | null>(null)
   const [samplesLoaded, setSamplesLoaded] = useState(false)
   const [loadingError, setLoadingError] = useState<string | null>(null)
@@ -125,6 +134,21 @@ export function BeatSequencer() {
     })
   }, [trackSettings, samplesLoaded, selectedKit])
 
+  // Update effects when they change
+  useEffect(() => {
+    if (!samplesLoaded) return
+
+    trackSettings.forEach((settings, trackIndex) => {
+      const soundName = SAMPLES[trackIndex].name.toLowerCase()
+      const effects = effectsRef.current[soundName]
+      if (effects) {
+        effects.reverb.wet.value = settings.effectsOn ? settings.reverb : 0
+        effects.delay.wet.value = settings.effectsOn ? settings.delay : 0
+        effects.noise.gain.value = settings.effectsOn ? settings.noise : 0
+      }
+    })
+  }, [trackSettings, samplesLoaded])
+
   // Initialize Tone.js and create synthetic drum sounds
   useEffect(() => {
     setTrackSettings(INITIAL_TRACK_SETTINGS)
@@ -152,7 +176,18 @@ export function BeatSequencer() {
             if (kitSound) {
               const SynthClass = Tone[kitSound.type as keyof typeof Tone]
               if (SynthClass) {
-                synths[soundName] = new SynthClass(kitSound.options).toDestination()
+                const synth = new SynthClass(kitSound.options)
+                const reverb = new Tone.Reverb()
+                const delay = new Tone.FeedbackDelay()
+                synth.chain(reverb, delay, Tone.Destination)
+                synths[soundName] = synth
+
+                // Handle noise separately as a parallel source
+                const noise = new Tone.Noise("white").start()
+                const noiseGain = new Tone.Gain(0).toDestination()
+                noise.connect(noiseGain)
+
+                effectsRef.current[soundName] = { reverb, delay, noise: noiseGain, noiseSource: noise }
               }
             }
           })
@@ -269,6 +304,15 @@ export function BeatSequencer() {
         if (synth && synth.dispose) {
           synth.dispose()
         }
+      })
+
+      // Dispose all effects
+      Object.values(effectsRef.current).forEach((effectGroup) => {
+        Object.values(effectGroup).forEach((effect) => {
+          if (effect && effect.dispose) {
+            effect.dispose()
+          }
+        })
       })
     }
   }, [selectedKit]) // Empty dependency array to run only once
@@ -535,7 +579,11 @@ export function BeatSequencer() {
     event.target.value = ""
   }
 
-  const handleTrackSettingChange = (trackIndex: number, setting: keyof TrackSettings, value: number) => {
+  const handleTrackSettingChange = (
+    trackIndex: number,
+    setting: keyof TrackSettings,
+    value: number | boolean,
+  ) => {
     const newSettings = [...trackSettings]
     newSettings[trackIndex] = { ...newSettings[trackIndex], [setting]: value }
     setTrackSettings(newSettings)
@@ -1064,10 +1112,10 @@ export function BeatSequencer() {
 
       // Draw step numbers
       ctx.fillStyle = theme === "dark" ? "#999" : "#666"
-      ctx.font = "12px sans-serif"
+      ctx.font = "16px sans-serif"
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"
-      const textRadius = radius * 1.1
+      const textRadius = radius * 1.08
       ctx.fillText((i + 1).toString(), centerX + Math.cos(angle) * textRadius, centerY + Math.sin(angle) * textRadius)
     }
 
@@ -1084,7 +1132,7 @@ export function BeatSequencer() {
 
       // Draw track name
       ctx.fillStyle = TRACK_COLORS[trackIndex]
-      ctx.font = "14px sans-serif"
+      ctx.font = "18px sans-serif"
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"
       ctx.fillText(`${SAMPLES[trackIndex].name} (${SAMPLES[trackIndex].key})`, centerX, centerY - trackRadius)
@@ -1100,28 +1148,28 @@ export function BeatSequencer() {
           // Active step
           ctx.fillStyle = TRACK_COLORS[trackIndex]
           ctx.beginPath()
-          ctx.arc(x, y, 10, 0, Math.PI * 2)
+          ctx.arc(x, y, 14, 0, Math.PI * 2)
           ctx.fill()
 
           // Add highlight effect if this is the current step and we're playing
           if (isPlaying && stepIndex === currentStep) {
             ctx.fillStyle = "rgba(255, 255, 255, 0.5)"
             ctx.beginPath()
-            ctx.arc(x, y, 14, 0, Math.PI * 2)
+            ctx.arc(x, y, 18, 0, Math.PI * 2)
             ctx.fill()
           }
         } else {
           // Inactive step
           ctx.fillStyle = theme === "dark" ? "#333" : "#ddd"
           ctx.beginPath()
-          ctx.arc(x, y, 8, 0, Math.PI * 2)
+          ctx.arc(x, y, 12, 0, Math.PI * 2)
           ctx.fill()
 
           // Draw outline
           ctx.strokeStyle = TRACK_COLORS[trackIndex]
           ctx.lineWidth = 1
           ctx.beginPath()
-          ctx.arc(x, y, 8, 0, Math.PI * 2)
+          ctx.arc(x, y, 12, 0, Math.PI * 2)
           ctx.stroke()
         }
       }
@@ -1183,8 +1231,8 @@ export function BeatSequencer() {
     // Calculate track index from distance
     for (let trackIndex = 0; trackIndex < SAMPLES.length; trackIndex++) {
       const trackRadius = maxRadius * (0.9 - trackIndex * 0.15)
-      const radiusMin = trackRadius - 15
-      const radiusMax = trackRadius + 15
+      const radiusMin = trackRadius - 20
+      const radiusMax = trackRadius + 20
 
       if (distance >= radiusMin && distance <= radiusMax) {
         // Toggle this step
@@ -1237,9 +1285,9 @@ export function BeatSequencer() {
       <div className="relative mb-4">
         <canvas
           ref={canvasRef}
-          width={600}
-          height={600}
-          className="w-full max-w-[600px] h-auto cursor-pointer touch-none"
+          width={800}
+          height={800}
+          className="w-full max-w-[800px] h-auto cursor-pointer touch-none"
           onClick={handleMouseClick}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
@@ -1247,7 +1295,7 @@ export function BeatSequencer() {
         />
       </div>
 
-      <div className="w-full max-w-[600px] grid gap-6">
+      <div className="w-full max-w-[800px] grid gap-6">
         {/* Main controls */}
         <div className="flex flex-wrap gap-2 justify-center">
           <Button onClick={togglePlay} className="flex items-center gap-2" disabled={!samplesLoaded}>
