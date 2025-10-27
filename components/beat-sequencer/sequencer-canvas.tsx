@@ -154,7 +154,8 @@ export function SequencerCanvas({
     let angle = Math.atan2(dy, dx) + Math.PI / 2
     if (angle < 0) angle += Math.PI * 2
 
-    const stepIndex = Math.floor((angle / (Math.PI * 2)) * STEPS) % STEPS
+    const normalizedAngle = angle / (Math.PI * 2)
+    const stepIndex = Math.round(normalizedAngle * STEPS) % STEPS
 
     for (let trackIndex = 0; trackIndex < SAMPLES.length; trackIndex++) {
       const trackRadius = maxRadius * (0.9 - trackIndex * 0.15)
