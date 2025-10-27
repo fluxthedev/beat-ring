@@ -69,6 +69,7 @@ export function BeatSequencer() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
+    const lastStepRef = useRef(0)
   const [tempo, setTempo] = useState(INITIAL_TEMPO)
   const [swing, setSwing] = useState(0)
   const [selectedKit, setSelectedKit] = useState("Default")
@@ -89,6 +90,10 @@ export function BeatSequencer() {
   const sequencerRef = useRef<Tone.Sequence | null>(null)
   const [samplesLoaded, setSamplesLoaded] = useState(false)
   const [loadingError, setLoadingError] = useState<string | null>(null)
+
+  useEffect(() => {
+    lastStepRef.current = currentStep
+  }, [currentStep])
 
   // Update swing when it changes
   useEffect(() => {
@@ -152,6 +157,17 @@ export function BeatSequencer() {
 
   // Initialize Tone.js and create synthetic drum sounds
   useEffect(() => {
+    const wasTransportRunning = Tone.Transport.state === "started"
+    const previousPosition = Tone.Transport.position
+    const wasSequenceStarted = sequencerRef.current?.state === "started"
+      // When resuming playback, advance to the next step so the transport
+      // continues forward instead of replaying the last triggered beat.
+      const resumeStepIndex = (lastStepRef.current + 1) % STEPS
+
+    if (wasTransportRunning) {
+      Tone.Transport.pause()
+    }
+
     let mounted = true
     setSamplesLoaded(false)
     setLoadingError(null)
@@ -241,6 +257,18 @@ export function BeatSequencer() {
         if (mounted) {
           setSamplesLoaded(true)
           setLoadingError(null)
+        }
+
+        if (mounted && wasTransportRunning && wasSequenceStarted) {
+          try {
+            if (sequencerRef.current && sequencerRef.current.state !== "started") {
+              sequencerRef.current.start(0, resumeStepIndex)
+            }
+            Tone.Transport.start("+0", previousPosition)
+          } catch (resumeError) {
+            console.error("Error resuming playback:", resumeError)
+            setIsPlaying(false)
+          }
         }
       } catch (error) {
         if (mounted) {
