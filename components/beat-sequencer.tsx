@@ -12,7 +12,9 @@ import { useTheme } from "next-themes"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useToast } from "@/hooks/use-toast"
 import { useMobile } from "@/hooks/use-mobile"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FileAudio, Music } from "lucide-react"
+import { KITS } from "@/lib/kits"
 
 // Define the sound samples
 const SAMPLES = [
@@ -49,6 +51,7 @@ export function BeatSequencer() {
   const [currentStep, setCurrentStep] = useState(0)
   const [tempo, setTempo] = useState(INITIAL_TEMPO)
   const [swing, setSwing] = useState(0)
+  const [selectedKit, setSelectedKit] = useState("Default")
   const [metronome, setMetronome] = useState(false)
   const [quantize, setQuantize] = useState(true)
   const [pattern, setPattern] = useState<boolean[][]>(INITIAL_PATTERN)
@@ -93,95 +96,19 @@ export function BeatSequencer() {
 
         // Create synthetic drum sounds using Tone.js with error handling
         const synths: Record<string, any> = {}
+        const kit = KITS[selectedKit as keyof typeof KITS]
 
         try {
-          // Kick drum - low frequency sine wave with envelope
-          synths.kick = new Tone.MembraneSynth({
-            pitchDecay: 0.05,
-            octaves: 10,
-            oscillator: {
-              type: "sine",
-            },
-            envelope: {
-              attack: 0.001,
-              decay: 0.4,
-              sustain: 0.01,
-              release: 1.4,
-              attackCurve: "exponential",
-            },
-          }).toDestination()
-
-          // Snare drum - noise burst with bandpass filter and pitch envelope
-          synths.snare = new Tone.NoiseSynth({
-            noise: {
-              type: "white",
-              playbackRate: 2,
-            },
-            envelope: {
-              attack: 0.001,
-              decay: 0.2,
-              sustain: 0.1,
-              release: 0.1,
-            },
-          }).chain(
-            new Tone.Filter({
-              frequency: 3000,
-              type: "bandpass",
-              Q: 1,
-            }),
-            Tone.Destination,
-          )
-
-          // Clap - multiple quick noise bursts to simulate hand clap
-          synths.clap = new Tone.NoiseSynth({
-            noise: {
-              type: "pink",
-              playbackRate: 0.5,
-            },
-            envelope: {
-              attack: 0.001,
-              decay: 0.05,
-              sustain: 0.3,
-              release: 0.1,
-            },
-          }).chain(
-            new Tone.Filter({
-              frequency: 2000,
-              type: "highpass",
-              Q: 0.5,
-            }),
-            Tone.Destination,
-          )
-
-          // Hi-hat - high frequency noise burst
-          synths.hihat = new Tone.NoiseSynth({
-            noise: {
-              type: "white",
-              playbackRate: 1,
-            },
-            envelope: {
-              attack: 0.001,
-              decay: 0.1,
-              sustain: 0.01,
-              release: 0.03,
-            },
-          }).toDestination()
-
-          // Tom - membrane synth with higher pitch than kick
-          synths.tom = new Tone.MembraneSynth({
-            pitchDecay: 0.008,
-            octaves: 4,
-            oscillator: {
-              type: "sine",
-            },
-            envelope: {
-              attack: 0.001,
-              decay: 0.5,
-              sustain: 0.01,
-              release: 1,
-              attackCurve: "exponential",
-            },
-          }).toDestination()
+          SAMPLES.forEach((sample) => {
+            const soundName = sample.name.toLowerCase()
+            const kitSound = kit[sample.name as keyof typeof kit]
+            if (kitSound) {
+              const SynthClass = Tone[kitSound.type as keyof typeof Tone]
+              if (SynthClass) {
+                synths[soundName] = new SynthClass(kitSound.options).toDestination()
+              }
+            }
+          })
 
           // Metronome - simple sine wave
           synths.metronome = new Tone.Synth({
@@ -215,7 +142,7 @@ export function BeatSequencer() {
               // Play sounds for this step
               pattern.forEach((track, trackIndex) => {
                 if (track[step]) {
-                  const soundName = ["kick", "snare", "hihat", "clap", "tom"][trackIndex]
+                  const soundName = SAMPLES[trackIndex].name.toLowerCase()
                   const synth = synthsRef.current[soundName]
                   if (synth) {
                     try {
@@ -223,7 +150,7 @@ export function BeatSequencer() {
                         synth.triggerAttackRelease("C1", "8n", time)
                       } else if (soundName === "snare") {
                         synth.triggerAttackRelease("8n", time)
-                      } else if (soundName === "hihat") {
+                      } else if (soundName === "hi-hat") {
                         synth.triggerAttackRelease("32n", time)
                       } else if (soundName === "clap") {
                         synth.triggerAttackRelease("8n", time)
@@ -297,7 +224,7 @@ export function BeatSequencer() {
         }
       })
     }
-  }, []) // Empty dependency array to run only once
+  }, [selectedKit]) // Empty dependency array to run only once
 
   // Separate useEffect to update the sequence callback when pattern or metronome changes
   useEffect(() => {
@@ -310,7 +237,7 @@ export function BeatSequencer() {
           // Play sounds for this step
           pattern.forEach((track, trackIndex) => {
             if (track[step]) {
-              const soundName = ["kick", "snare", "hihat", "clap", "tom"][trackIndex]
+              const soundName = SAMPLES[trackIndex].name.toLowerCase()
               const synth = synthsRef.current[soundName]
               if (synth) {
                 try {
@@ -318,7 +245,7 @@ export function BeatSequencer() {
                     synth.triggerAttackRelease("C1", "8n", time)
                   } else if (soundName === "snare") {
                     synth.triggerAttackRelease("8n", time)
-                  } else if (soundName === "hihat") {
+                  } else if (soundName === "hi-hat") {
                     synth.triggerAttackRelease("32n", time)
                   } else if (soundName === "clap") {
                     synth.triggerAttackRelease("8n", time)
@@ -467,14 +394,14 @@ export function BeatSequencer() {
 
     // If we're not playing, play the sound immediately for feedback
     if (!isPlaying && samplesLoaded) {
-      const soundName = ["kick", "snare", "hihat", "clap", "tom"][trackIndex]
+      const soundName = SAMPLES[trackIndex].name.toLowerCase()
       const synth = synthsRef.current[soundName]
       if (synth) {
         if (soundName === "kick") {
           synth.triggerAttackRelease("C1", "8n")
         } else if (soundName === "snare") {
           synth.triggerAttackRelease("8n")
-        } else if (soundName === "hihat") {
+        } else if (soundName === "hi-hat") {
           synth.triggerAttackRelease("32n")
         } else if (soundName === "clap") {
           synth.triggerAttackRelease("8n")
@@ -500,6 +427,7 @@ export function BeatSequencer() {
       pattern,
       tempo,
       swing,
+      selectedKit,
       metronome,
       quantize,
     }
@@ -532,6 +460,7 @@ export function BeatSequencer() {
         setPattern(data.pattern)
         setTempo(data.tempo || INITIAL_TEMPO)
         setSwing(data.swing || 0)
+        setSelectedKit(data.selectedKit || "Default")
         setMetronome(data.metronome || false)
         setQuantize(data.quantize || true)
 
@@ -563,6 +492,7 @@ export function BeatSequencer() {
       pattern,
       tempo,
       swing,
+      selectedKit,
       metronome,
       quantize,
     }
@@ -732,7 +662,7 @@ export function BeatSequencer() {
 
         pattern.forEach((track, trackIndex) => {
           if (track[step]) {
-            const soundName = ["kick", "snare", "hihat", "clap", "tom"][trackIndex]
+            const soundName = SAMPLES[trackIndex].name.toLowerCase()
 
             switch (soundName) {
               case "kick":
@@ -741,7 +671,7 @@ export function BeatSequencer() {
               case "snare":
                 createSnareSound(offlineContext, stepTime)
                 break
-              case "hihat":
+              case "hi-hat":
                 createHihatSound(offlineContext, stepTime)
                 break
               case "clap":
@@ -795,7 +725,7 @@ export function BeatSequencer() {
       const drumNotes = {
         kick: 36, // Bass Drum 1
         snare: 38, // Acoustic Snare
-        hihat: 42, // Closed Hi Hat
+        "hi-hat": 42, // Closed Hi Hat
         clap: 39, // Hand Clap
         tom: 45, // Low Tom
       }
@@ -823,7 +753,7 @@ export function BeatSequencer() {
 
         pattern.forEach((track, trackIndex) => {
           if (track[step]) {
-            const soundName = ["kick", "snare", "hihat", "clap", "tom"][trackIndex] as keyof typeof drumNotes
+            const soundName = SAMPLES[trackIndex].name.toLowerCase() as keyof typeof drumNotes
             const note = drumNotes[soundName]
 
             // Add note on event
@@ -979,6 +909,7 @@ export function BeatSequencer() {
         setPattern(data.pattern)
         setTempo(data.tempo || INITIAL_TEMPO)
         setSwing(data.swing || 0)
+        setSelectedKit(data.selectedKit || "Default")
         setMetronome(data.metronome || false)
         setQuantize(data.quantize || true)
 
@@ -1004,14 +935,14 @@ export function BeatSequencer() {
 
       if (trackIndex !== -1 && samplesLoaded) {
         // Play the sound
-        const soundName = ["kick", "snare", "hihat", "clap", "tom"][trackIndex]
+        const soundName = SAMPLES[trackIndex].name.toLowerCase()
         const synth = synthsRef.current[soundName]
         if (synth) {
           if (soundName === "kick") {
             synth.triggerAttackRelease("C1", "8n")
           } else if (soundName === "snare") {
             synth.triggerAttackRelease("8n")
-          } else if (soundName === "hihat") {
+          } else if (soundName === "hi-hat") {
             synth.triggerAttackRelease("32n")
           } else if (soundName === "clap") {
             synth.triggerAttackRelease("8n")
@@ -1322,6 +1253,25 @@ export function BeatSequencer() {
             <span className="text-sm font-medium">Swing: {swing}%</span>
           </div>
           <Slider value={[swing]} min={0} max={50} step={1} onValueChange={(value) => setSwing(value[0])} />
+        </div>
+
+        {/* Kit selection */}
+        <div className="grid gap-2">
+          <div className="flex justify-between items-center">
+            <span className="text-sm font-medium">Drum Kit</span>
+          </div>
+          <Select value={selectedKit} onValueChange={setSelectedKit}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a kit" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(KITS).map((kitName) => (
+                <SelectItem key={kitName} value={kitName}>
+                  {kitName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Toggle controls */}
