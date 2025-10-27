@@ -3,10 +3,23 @@
 import type React from "react"
 import { Slider } from "@/components/ui/slider"
 
+import { Switch } from "@/components/ui/switch"
+
 // Define the shape of the props
 interface MixerProps {
-  trackSettings: { volume: number; pitch: number }[]
-  handleTrackSettingChange: (trackIndex: number, setting: "volume" | "pitch", value: number) => void
+  trackSettings: {
+    volume: number
+    pitch: number
+    reverb: number
+    delay: number
+    noise: number
+    effectsOn: boolean
+  }[]
+  handleTrackSettingChange: (
+    trackIndex: number,
+    setting: "volume" | "pitch" | "reverb" | "delay" | "noise" | "effectsOn",
+    value: number | boolean,
+  ) => void
   samples: { name: string; key: string }[]
   trackColors: string[]
 }
@@ -42,6 +55,49 @@ export function Mixer({ trackSettings, handleTrackSettingChange, samples, trackC
                 onValueChange={(value) => handleTrackSettingChange(trackIndex, "pitch", value[0])}
               />
               <span className="text-xs text-center">{trackSettings[trackIndex].pitch} cents</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id={`effectsOn-${trackIndex}`}
+                checked={trackSettings[trackIndex].effectsOn}
+                onCheckedChange={(value) => handleTrackSettingChange(trackIndex, "effectsOn", value)}
+              />
+              <label htmlFor={`effectsOn-${trackIndex}`} className="text-xs">
+                Effects
+              </label>
+            </div>
+            <div className="grid gap-1">
+              <label className="text-xs">Reverb</label>
+              <Slider
+                value={[trackSettings[trackIndex].reverb]}
+                min={0}
+                max={1}
+                step={0.01}
+                onValueChange={(value) => handleTrackSettingChange(trackIndex, "reverb", value[0])}
+                disabled={!trackSettings[trackIndex].effectsOn}
+              />
+            </div>
+            <div className="grid gap-1">
+              <label className="text-xs">Echo</label>
+              <Slider
+                value={[trackSettings[trackIndex].delay]}
+                min={0}
+                max={1}
+                step={0.01}
+                onValueChange={(value) => handleTrackSettingChange(trackIndex, "delay", value[0])}
+                disabled={!trackSettings[trackIndex].effectsOn}
+              />
+            </div>
+            <div className="grid gap-1">
+              <label className="text-xs">Noise</label>
+              <Slider
+                value={[trackSettings[trackIndex].noise]}
+                min={0}
+                max={1}
+                step={0.01}
+                onValueChange={(value) => handleTrackSettingChange(trackIndex, "noise", value[0])}
+                disabled={!trackSettings[trackIndex].effectsOn}
+              />
             </div>
           </div>
         ))}
