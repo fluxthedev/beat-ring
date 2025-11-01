@@ -1,0 +1,31 @@
+name: Create GitHub issues from files
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    strategy:
+      matrix:
+        issue:
+          - title: "Keep audio engine running while updating tempo and swing"
+            file: .github/issues/keep-audio-engine-running-while-updating-tempo-and-swing.md
+          - title: "Surface audio initialization failures"
+            file: .github/issues/surface-audio-initialization-failures.md
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Create or update GitHub issue
+        uses: peter-evans/create-issue-from-file@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: ${{ matrix.issue.title }}
+          content-filepath: ${{ matrix.issue.file }}
+          labels: enhancement
+          update-existing: true
