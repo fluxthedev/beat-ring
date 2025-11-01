@@ -20,9 +20,9 @@ interface UseBeatSequencerOptions {
   isMobile: boolean
 }
 
-const clonePattern = (pattern: boolean[][]) => pattern.map((row) => [...row])
+export const clonePattern = (pattern: boolean[][]) => pattern.map((row) => [...row])
 
-const uint8ToBase64 = (bytes: Uint8Array) => {
+export const uint8ToBase64 = (bytes: Uint8Array) => {
   let binary = ""
   const chunkSize = 0x8000
 
@@ -33,7 +33,7 @@ const uint8ToBase64 = (bytes: Uint8Array) => {
   return btoa(binary)
 }
 
-const base64ToUint8 = (base64: string) => {
+export const base64ToUint8 = (base64: string) => {
   const binary = atob(base64)
   const bytes = new Uint8Array(binary.length)
 
@@ -44,7 +44,7 @@ const base64ToUint8 = (base64: string) => {
   return bytes
 }
 
-const bytesToString = (bytes: Uint8Array) => {
+export const bytesToString = (bytes: Uint8Array) => {
   if (typeof TextDecoder !== "undefined") {
     return new TextDecoder().decode(bytes)
   }
