@@ -1,3 +1,7 @@
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 
-export default [...nextCoreWebVitals];
+const config = Array.isArray(nextCoreWebVitals)
+  ? nextCoreWebVitals
+  : [nextCoreWebVitals];
+
+export default config;
