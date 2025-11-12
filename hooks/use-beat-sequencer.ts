@@ -63,7 +63,9 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
   const [currentStep, setCurrentStep] = useState(0)
   const lastStepRef = useRef(0)
   const [tempo, setTempo] = useState(INITIAL_TEMPO)
+  const tempoRef = useRef(INITIAL_TEMPO)
   const [swing, setSwing] = useState(0)
+  const swingRef = useRef(0)
   const [selectedKit, setSelectedKit] = useState("Default")
   const [metronome, setMetronome] = useState(false)
   const [quantize, setQuantize] = useState(true)
@@ -96,11 +98,13 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
   }, [history])
 
   useEffect(() => {
+    swingRef.current = swing
     Tone.Transport.swing = swing / 100
     Tone.Transport.swingSubdivision = "16n"
   }, [swing])
 
   useEffect(() => {
+    tempoRef.current = tempo
     Tone.Transport.bpm.value = tempo
   }, [tempo])
 
@@ -173,8 +177,8 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
           Object.values(effectGroup).forEach((fx: any) => fx.dispose())
         })
 
-        Tone.Transport.bpm.value = tempo
-        Tone.Transport.swing = swing / 100
+        Tone.Transport.bpm.value = tempoRef.current
+        Tone.Transport.swing = swingRef.current / 100
 
         const synths: Record<string, any> = {}
         const effects: Record<string, any> = {}
@@ -281,7 +285,7 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
         })
       })
     }
-  }, [selectedKit, tempo, swing])
+  }, [selectedKit])
 
   useEffect(() => {
     if (sequencerRef.current && samplesLoaded) {
