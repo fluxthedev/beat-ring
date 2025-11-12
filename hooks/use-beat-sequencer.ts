@@ -77,6 +77,8 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
   const [historyIndex, setHistoryIndex] = useState(0)
   const historyIndexRef = useRef(0)
   const historyRef = useRef<boolean[][][]>([clonePattern(INITIAL_PATTERN)])
+  const patternRef = useRef(pattern)
+  const metronomeRef = useRef(metronome)
   const { toast } = useToast()
 
   const synthsRef = useRef<Record<string, any>>({})
@@ -96,6 +98,14 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
   useEffect(() => {
     historyRef.current = history
   }, [history])
+
+  useEffect(() => {
+    patternRef.current = pattern
+  }, [pattern])
+
+  useEffect(() => {
+    metronomeRef.current = metronome
+  }, [metronome])
 
   useEffect(() => {
     swingRef.current = swing
@@ -150,6 +160,9 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
     })
   }, [trackSettings, samplesLoaded])
 
+  // Rebuild the synth/effects graph when the kit changes. Tempo and swing updates
+  // are handled by their dedicated effects via refs, so we intentionally keep the
+  // dependency list minimal to avoid unnecessary reinitialization work.
   useEffect(() => {
     const wasTransportRunning = Tone.Transport.state === "started"
     const previousPosition = Tone.Transport.position
@@ -219,7 +232,9 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
           (time, step) => {
             if (!mounted) return
             setCurrentStep(step)
-            pattern.forEach((track, trackIndex) => {
+            const currentPattern = patternRef.current
+            if (!currentPattern) return
+            currentPattern.forEach((track, trackIndex) => {
               if (track[step]) {
                 const soundName = SAMPLES[trackIndex].name.toLowerCase()
                 const synth = synthsRef.current[soundName]
@@ -236,7 +251,7 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
                 }
               }
             })
-            if (metronome && step % 4 === 0) {
+            if (metronomeRef.current && step % 4 === 0) {
               synthsRef.current["metronome"]?.triggerAttackRelease("C5", "32n", time)
             }
           },
@@ -286,53 +301,6 @@ export function useBeatSequencer({ isMobile }: UseBeatSequencerOptions) {
       })
     }
   }, [selectedKit])
-
-  useEffect(() => {
-    if (sequencerRef.current && samplesLoaded) {
-      try {
-        sequencerRef.current.callback = (time, step) => {
-          setCurrentStep(step)
-
-          pattern.forEach((track, trackIndex) => {
-            if (track[step]) {
-              const soundName = SAMPLES[trackIndex].name.toLowerCase()
-              const synth = synthsRef.current[soundName]
-              if (synth) {
-                try {
-                  if (soundName === "kick") {
-                    synth.triggerAttackRelease("C1", "8n", time)
-                  } else if (soundName === "snare") {
-                    synth.triggerAttackRelease("8n", time)
-                  } else if (soundName === "hi-hat") {
-                    synth.triggerAttackRelease("32n", time)
-                  } else if (soundName === "clap") {
-                    synth.triggerAttackRelease("8n", time)
-                  } else if (soundName === "tom") {
-                    synth.triggerAttackRelease("G2", "8n", time)
-                  }
-                } catch (playError) {
-                  console.warn(`Error playing ${soundName}:`, playError)
-                }
-              }
-            }
-          })
-
-          if (metronome && step % 4 === 0) {
-            const metronomeSynth = synthsRef.current["metronome"]
-            if (metronomeSynth) {
-              try {
-                metronomeSynth.triggerAttackRelease("C5", "32n", time)
-              } catch (metronomeError) {
-                console.warn("Error playing metronome:", metronomeError)
-              }
-            }
-          }
-        }
-      } catch (callbackError) {
-        console.error("Error updating sequence callback:", callbackError)
-      }
-    }
-  }, [pattern, metronome, samplesLoaded])
 
   const addToHistory = useCallback((newPattern: boolean[][]) => {
     setHistory((prevHistory) => {
