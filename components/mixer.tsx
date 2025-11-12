@@ -24,13 +24,22 @@ interface MixerProps {
   trackColors: ReadonlyArray<string>
 }
 
+const toTranslucent = (color: string) =>
+  color.startsWith("rgb(")
+    ? color.replace("rgb", "rgba").replace(")", ", 0.2)")
+    : `${color}33`
+
 export function Mixer({ trackSettings, handleTrackSettingChange, samples, trackColors }: MixerProps) {
   return (
     <div className="grid gap-6 mt-4">
       <h2 className="text-xl font-bold text-center">Mixer</h2>
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
         {samples.map((sample, trackIndex) => (
-          <div key={trackIndex} className="grid gap-3 p-4 rounded-lg" style={{ backgroundColor: `${trackColors[trackIndex]}33` }}>
+          <div
+            key={trackIndex}
+            className="grid gap-3 p-4 rounded-lg"
+            style={{ backgroundColor: toTranslucent(trackColors[trackIndex]) }}
+          >
             <span className="text-sm font-bold" style={{ color: trackColors[trackIndex] }}>
               {sample.name}
             </span>
